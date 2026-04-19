@@ -1,133 +1,167 @@
 import streamlit as st
 import pickle
-import re
+import numpy as np
+import matplotlib.pyplot as plt
 
-# =========================
-# Load Model + Vectorizer
-# =========================
-model = pickle.load(open("model.pkl", "rb"))
-vectorizer = pickle.load(open("vectorizer.pkl", "rb"))
+# ======================
+# LOAD MODEL
+# ======================
+model = pickle.load(open("model (3).pkl", "rb"))
+vectorizer = pickle.load(open("vectorizer (2).pkl", "rb"))
 
-# =========================
-# Custom CSS (BLACK + PINK THEME)
-# =========================
+# ======================
+# PAGE SETTINGS
+# ======================
+st.set_page_config(page_title="Smishing Detection", layout="wide")
+
+# ======================
+# CUSTOM CSS (KEEP SAME THEME)
+# ======================
 st.markdown("""
-    <style>
-    .stApp { background-color: #0e1117; color: white; }
-    h1, h2, h3 { color: white; }
+<style>
+.stApp { background-color: black; color: white; }
 
-    .stButton>button {
-        background-color: #ff4b8b;
-        color: white;
-        border-radius: 10px;
-        height: 3em;
-        width: 100%;
-    }
+h1, h2, h3 { color: #ff4da6; }
 
-    .stTextArea textarea {
-        background-color: #1c1f26;
-        color: white;
-    }
+textarea {
+    background-color: #111 !important;
+    color: white !important;
+}
 
-    .box {
-        padding: 15px;
-        border-radius: 10px;
-        background-color: #1c1f26;
-        margin-bottom: 10px;
-    }
+.stButton button {
+    background-color: #ff4da6;
+    color: white;
+    border-radius: 10px;
+}
 
-    .highlight {
-        color: #ff4b8b;
-        font-weight: bold;
-    }
-    </style>
+</style>
 """, unsafe_allow_html=True)
 
-# =========================
-# Text Cleaning
-# =========================
-def clean_text(text):
-    text = str(text).lower()
-    text = re.sub(r'http\S+', '', text)
-    text = re.sub(r'\d+', '', text)
-    text = re.sub(r'[^\w\s]', '', text)
-    return text
+# ======================
+# TITLE
+# ======================
+st.title("📱 Smishing Detection System")
+st.write("Detect fraudulent SMS messages using Machine Learning")
 
-# =========================
-# Keyword Detection
-# =========================
-suspicious_keywords = [
-    "otp", "urgent", "click", "win", "prize",
-    "bank", "verify", "link", "free", "offer",
-    "account", "suspend", "update", "reward"
-]
+# ======================
+# LAYOUT
+# ======================
+col1, col2 = st.columns([3,1])
 
-def find_keywords(text):
-    return [word for word in suspicious_keywords if word in text.lower()]
-
-# =========================
-# Highlight Keywords
-# =========================
-def highlight_text(text, keywords):
-    for word in keywords:
-        text = re.sub(f"({word})", r"<span class='highlight'>\1</span>", text, flags=re.IGNORECASE)
-    return text
-
-# =========================
-# UI
-# =========================
-st.title("📩 Smishing Detection Dashboard")
-
-col1, col2 = st.columns([2,1])
-
+# ======================
 # LEFT PANEL
+# ======================
 with col1:
-    st.markdown("### 📥 Enter SMS")
-    input_text = st.text_area("Type message here...")
+    sms = st.text_area("✉️ Enter SMS Message")
 
-    if st.button("Analyze Message"):
-        cleaned = clean_text(input_text)
-        data = vectorizer.transform([cleaned])
+    if st.button("🔍 Analyze Message"):
 
-        prediction = model.predict(data)
-        prob = model.predict_proba(data)[0][1] * 100  # spam probability %
+        if sms.strip() == "":
+            st.warning("Please enter a message")
 
-        keywords = find_keywords(input_text)
-        highlighted = highlight_text(input_text, keywords)
-
-        # RESULT BOX
-        st.markdown('<div class="box">', unsafe_allow_html=True)
-
-        if prediction[0] == 1:
-            st.error("🚨 SMISHING DETECTED")
         else:
-            st.success("✅ SAFE MESSAGE")
+            data = vectorizer.transform([sms])
+            prediction = model.predict(data)[0]
+            prob = model.predict_proba(data)[0]
 
-        st.write(f"### 🎯 Spam Probability: {prob:.2f}%")
+            spam_prob = prob[1]
+            safe_prob = prob[0]
 
-        # Risk Meter
-        if prob > 75:
-            st.error("🔴 HIGH RISK")
-        elif prob > 40:
-            st.warning("🟠 MEDIUM RISK")
-        else:
-            st.success("🟢 LOW RISK")
+            st.subheader("📊 Result")
 
-        st.markdown('</div>', unsafe_allow_html=True)
+            if prediction == 1:
+                st.error(f"🚨 SPAM MESSAGE ({spam_prob*100:.2f}%)")
+            else:
+                st.success(f"✅ SAFE MESSAGE ({safe_prob*100:.2f}%)")
 
-        # Highlighted Message
-        st.markdown("### 🔍 Message Analysis")
-        st.markdown(f"<div class='box'>{highlighted}</div>", unsafe_allow_html=True)
+            # ======================
+            # PROGRESS BAR
+            # ======================
+            st.subheader("📈 Spam Probability")
+            st.progress(int(spam_prob * 100))
 
+            # ======================
+            # BAR GRAPH (NEW)
+            # ======================
+            st.subheader("📊 Probability Distribution")
+
+            fig, ax = plt.subplots()
+            labels = ['Safe', 'Spam']
+            values = [safe_prob, spam_prob]
+
+            ax.bar(labels, values)
+            ax.set_ylim([0,1])
+            ax.set_ylabel("Probability")
+
+            st.pyplot(fig)
+
+            # ======================
+            # MESSAGE ANALYSIS
+            # ======================
+            st.subheader("📋 Message Analysis")
+
+            word_count = len(sms.split())
+            char_count = len(sms)
+
+            st.write(f"Words: {word_count}")
+            st.write(f"Characters: {char_count}")
+
+            # ======================
+            # RISK LEVEL
+            # ======================
+            st.subheader("⚠️ Risk Level")
+
+            if spam_prob > 0.75:
+                st.error("HIGH RISK 🚨")
+            elif spam_prob > 0.4:
+                st.warning("MEDIUM RISK ⚠️")
+            else:
+                st.success("LOW RISK ✅")
+
+            # ======================
+            # KEYWORD DETECTION
+            # ======================
+            st.subheader("🔍 Detected Keywords")
+
+            spam_keywords = [
+                "click","money","win","free","offer",
+                "link","urgent","reward","verify","account"
+            ]
+
+            found = False
+            for word in sms.split():
+                if word.lower() in spam_keywords:
+                    st.markdown(f"🔴 **{word}**")
+                    found = True
+
+            if not found:
+                st.write("No suspicious keywords found")
+
+# ======================
 # RIGHT PANEL
+# ======================
 with col2:
-    st.markdown("### ⚠️ Detected Keywords")
+    st.sidebar.title("📊 Info Panel")
 
-    if 'input_text' in locals():
-        keywords = find_keywords(input_text)
+    st.sidebar.write("Model: Logistic Regression")
+    st.sidebar.write("Accuracy: ~93%")
+    st.sidebar.write("F1 Score: ~94%")
 
-        if keywords:
-            for k in keywords:
-                st.markdown(f"<div class='box'>🔍 {k}</div>", unsafe_allow_html=True)
-        else:
-            st.markdown("<div class='box'>No suspicious keywords</div>", unsafe_allow_html=True)
+    st.sidebar.markdown("---")
+
+    st.sidebar.subheader("🧪 Try Examples")
+
+    if st.sidebar.button("Spam Example"):
+        st.session_state.sms = "click this link and get money"
+
+    if st.sidebar.button("Normal Example"):
+        st.session_state.sms = "hey kese ho"
+
+    st.sidebar.markdown("---")
+    st.sidebar.write("Smishing Detection Project")
+
+# ======================
+# FOOTER
+# ======================
+st.markdown("---")
+st.markdown("💡 Built with Machine Learning + Streamlit")
